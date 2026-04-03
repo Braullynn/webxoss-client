@@ -43,6 +43,9 @@ ol,ul,li {
 }
 #detail-card-image {
 	border-radius: 4%;
+	width: 250px;
+	height: 349px;
+	object-fit: contain;
 }
 #detail-card-data {
 	height: 340px;
@@ -223,8 +226,8 @@ ol,ul,li {
 }
 
 #search-list img {
-	width: 127px;
-	height: 176px;
+	width: 62px;
+	height: 87px;
 	cursor: pointer;
 }
 
