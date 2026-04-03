@@ -1,0 +1,197 @@
+/* =========================================
+   VS CPU — Estilos da Tela de Preparação
+   ========================================= */
+
+#vs-cpu-overlay {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 100vh;
+	background: rgba(10, 10, 30, 0.95);
+	z-index: 9999;
+	font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+	overflow: auto;
+}
+
+#vs-cpu-overlay.active {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+.vs-cpu-container {
+	background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+	border: 1px solid #e94560;
+	border-radius: 12px;
+	padding: 32px 40px;
+	max-width: 560px;
+	width: 90%;
+	box-shadow: 0 0 40px rgba(233, 69, 96, 0.25),
+	            0 0 80px rgba(15, 52, 96, 0.35);
+	animation: vsCpuFadeIn 0.3s ease-out;
+}
+
+@keyframes vsCpuFadeIn {
+	from {
+		opacity: 0;
+		transform: scale(0.95) translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1) translateY(0);
+	}
+}
+
+.vs-cpu-title {
+	text-align: center;
+	margin: 0 0 28px 0;
+	color: #e94560;
+	font-size: 28px;
+	font-weight: 700;
+	letter-spacing: 3px;
+	text-transform: uppercase;
+	text-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+}
+
+.vs-cpu-title span {
+	color: #eee;
+	font-weight: 300;
+}
+
+.vs-cpu-section {
+	margin-bottom: 22px;
+}
+
+.vs-cpu-section label {
+	display: block;
+	color: #a0aec0;
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 1.5px;
+	margin-bottom: 8px;
+}
+
+.vs-cpu-section select {
+	width: 100%;
+	padding: 10px 14px;
+	background: #0d1b2a;
+	border: 1px solid #2a3f5f;
+	border-radius: 6px;
+	color: #e2e8f0;
+	font-size: 15px;
+	outline: none;
+	transition: border-color 0.2s, box-shadow 0.2s;
+	appearance: none;
+	-webkit-appearance: none;
+	-moz-appearance: none;
+	cursor: pointer;
+}
+
+.vs-cpu-section select:focus {
+	border-color: #e94560;
+	box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.2);
+}
+
+.vs-cpu-section select:hover {
+	border-color: #4a6fa5;
+}
+
+.vs-cpu-cpu-info {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 14px;
+	background: rgba(233, 69, 96, 0.08);
+	border: 1px solid rgba(233, 69, 96, 0.2);
+	border-radius: 6px;
+	margin-top: 6px;
+}
+
+.vs-cpu-cpu-info .cpu-badge {
+	background: #e94560;
+	color: #fff;
+	font-size: 10px;
+	font-weight: 700;
+	padding: 3px 8px;
+	border-radius: 4px;
+	letter-spacing: 1px;
+}
+
+.vs-cpu-cpu-info .cpu-desc {
+	color: #a0aec0;
+	font-size: 13px;
+}
+
+.vs-cpu-divider {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin: 24px 0;
+	gap: 16px;
+}
+
+.vs-cpu-divider .line {
+	flex: 1;
+	height: 1px;
+	background: linear-gradient(90deg, transparent, #2a3f5f, transparent);
+}
+
+.vs-cpu-divider .vs-text {
+	color: #e94560;
+	font-size: 22px;
+	font-weight: 800;
+	text-shadow: 0 0 15px rgba(233, 69, 96, 0.4);
+}
+
+.vs-cpu-buttons {
+	display: flex;
+	gap: 12px;
+	margin-top: 28px;
+}
+
+.vs-cpu-buttons button {
+	flex: 1;
+	padding: 12px 20px;
+	border: none;
+	border-radius: 6px;
+	font-size: 15px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.2s;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+}
+
+.btn-vs-cpu-start {
+	background: linear-gradient(135deg, #e94560, #c62040);
+	color: white;
+	box-shadow: 0 4px 14px rgba(233, 69, 96, 0.4);
+}
+
+.btn-vs-cpu-start:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 6px 20px rgba(233, 69, 96, 0.55);
+}
+
+.btn-vs-cpu-start:active {
+	transform: translateY(0);
+}
+
+.btn-vs-cpu-back {
+	background: rgba(255, 255, 255, 0.06);
+	color: #a0aec0;
+	border: 1px solid #2a3f5f;
+}
+
+.btn-vs-cpu-back:hover {
+	background: rgba(255, 255, 255, 0.1);
+	color: #e2e8f0;
+}
+
+/* Botão VS CPU no Hall (integração com o estilo existente) */
+#button-vs-cpu {
+	margin-top: 8px;
+}

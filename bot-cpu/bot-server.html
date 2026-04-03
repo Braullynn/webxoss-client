@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>VS CPU Server</title>
+  <script>
+  var global = window;
+  </script>
+
+  <!-- Engine do jogo (Arquivos na subpasta engine/) -->
+  <script src="engine/util.js"></script>
+  <script src="engine/random.min.js"></script>
+  <script src="engine/Callback.js"></script>
+  <script src="engine/Game.js"></script>
+  <script src="engine/Phase.js"></script>
+  <script src="engine/IO.js"></script>
+  <script src="engine/Player.js"></script>
+  <script src="engine/Card.js"></script>
+  <script src="engine/Zone.js"></script>
+  <script src="engine/CardInfo.js"></script>
+  <script src="engine/Timming.js"></script>
+  <script src="engine/Mask.js"></script>
+  <script src="engine/ConstEffect.js"></script>
+  <script src="engine/ConstEffectManager.js"></script>
+  <script src="engine/Effect.js"></script>
+  <script src="engine/EffectManager.js"></script>
+  <script src="engine/FakeSocket.js"></script>
+  <script src="engine/Client.js"></script>
+  <script src="engine/Room.js"></script>
+  <script src="engine/RoomManager.js"></script>
+
+  <!-- Bot CPU (Scripts na mesma pasta bot-cpu/) -->
+  <script src="BotLogger.js"></script>
+  <script src="BotDecks.js"></script>
+  <script src="BotGameState.js"></script>
+  <script src="BotController.js"></script>
+  <script src="strategies/WHITE_HOPE.js"></script>
+  <script src="bot-server.js"></script>
+</head>
+<body>
+  <div id="status" style="font-family: monospace; padding: 20px; background: #1a1a2e; color: #0f0; height: 100vh;">
+    <h2 style="color: #e94560;">⚔ VS CPU Server</h2>
+    <pre id="log" style="color: #16c79a; white-space: pre-wrap;"></pre>
+  </div>
+</body>
+</html>
