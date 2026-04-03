@@ -179,6 +179,7 @@ BotController.prototype.processMessage = function (msgObj) {
  */
 BotController.prototype.handleSelectMessages = function (selectMsgs) {
 	if (this._gameOver) return;
+	var self = this;
 
 	this.logger.log('Recebidos ' + selectMsgs.length + ' SELECT(s): ' +
 		selectMsgs.map(function (m) { return m.label; }).join(', '), 'info');
