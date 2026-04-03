@@ -35,6 +35,11 @@ function BotGameState() {
 
 	this.initialized = false;
 	this.turnCount = 0;
+
+	// Novas propriedades para IA inteligente
+	this.isMyTurn = false;
+	this.myLrigLevel = 0;
+	this.myEnerCount = 0;
 }
 
 /**
@@ -49,7 +54,7 @@ BotGameState.prototype.initialize = function (msg) {
 	this.enemyZones = msg.opponentZones;
 
 	// Mapear cartas do LRIG deck (temos PIDs)
-	if (msg.playerZones.lrigDeckCardInfos) {
+	if (msg.playerZones && msg.playerZones.lrigDeckCardInfos) {
 		msg.playerZones.lrigDeckCards.forEach(function (sid, idx) {
 			var info = msg.playerZones.lrigDeckCardInfos[idx];
 			if (info && info.pid) {
@@ -74,8 +79,58 @@ BotGameState.prototype.handleMoveCard = function (msg) {
 		this.sidToPid[cardSid] = pid;
 	}
 
-	// Atualizar mapeamento de zona
+	// Remover de zona antiga (se necessário para coleções)
+	// Para simplificar, vamos reconstruir as coleções básicas que a IA usa
 	this.sidToZone[cardSid] = zoneSid;
+
+	// Atualizar propriedades específicas
+	this.updateCollections();
+
+	// Rastrear nível da LRIG
+	if (zoneSid === this.myZones.lrig && pid) {
+		var info = this.getCardInfo(cardSid);
+		if (info && info.level !== undefined) {
+			this.myLrigLevel = info.level;
+		}
+	}
+};
+
+/**
+ * Reatribui as coleções de SIDs baseadas no mapeamento sidToZone.
+ */
+BotGameState.prototype.updateCollections = function () {
+	this.myHandSids = [];
+	this.myEnerSids = [];
+	this.myFieldSids = [null, null, null];
+	this.enemyFieldSids = [null, null, null];
+
+	var self = this;
+	for (var sid in this.sidToZone) {
+		var z = this.sidToZone[sid];
+		var nSid = parseInt(sid);
+
+		if (z === this.myZones.hand) {
+			this.myHandSids.push(nSid);
+		} else if (z === this.myZones.ener) {
+			this.myEnerSids.push(nSid);
+		} else if (z === this.myZones.lrig) {
+			this.myLrigSid = nSid;
+		} else if (z === this.enemyZones.lrig) {
+			this.enemyLrigSid = nSid;
+		} else {
+			// SIGNI Zones (normalmente array de 3 SIDs em myZones.signi)
+			if (this.myZones.signi) {
+				var myIdx = this.myZones.signi.indexOf(z);
+				if (myIdx !== -1) this.myFieldSids[myIdx] = nSid;
+			}
+			if (this.enemyZones.signi) {
+				var enIdx = this.enemyZones.signi.indexOf(z);
+				if (enIdx !== -1) this.enemyFieldSids[enIdx] = nSid;
+			}
+		}
+	}
+
+	this.myEnerCount = this.myEnerSids.length;
 };
 
 /**
@@ -114,6 +169,21 @@ BotGameState.prototype.getCardInfo = function (sid) {
 	var pid = this.getPid(sid);
 	if (!pid || typeof CardInfo === 'undefined') return null;
 	return CardInfo[pid] || null;
+};
+
+/**
+ * Retorna se o bot deve poupar energia para o Grow da LRIG.
+ * Regra: Se LRIG < lvl 4 e ener <= 1.
+ */
+BotGameState.prototype.shouldSaveEnerForGrow = function () {
+	return this.myLrigLevel < 4 && this.myEnerCount <= 1;
+};
+
+/**
+ * Retorna se estamos em um timing defensivo (turno do oponente).
+ */
+BotGameState.prototype.isDefensiveTiming = function () {
+	return !this.isMyTurn;
 };
 
 window.BotGameState = BotGameState;

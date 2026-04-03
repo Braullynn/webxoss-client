@@ -134,6 +134,9 @@ WhiteHopeStrategy.prototype.evaluateSingleSelect = function (msg, gameState) {
 		case 'PROTECT':
 			return this.handleProtect(msg, gameState);
 
+		case 'LAUNCH':
+			return this.handleLaunch(msg, gameState);
+
 		default:
 			// Fallback genérico
 			return this.handleGenericSelect(msg, gameState);
@@ -222,8 +225,14 @@ WhiteHopeStrategy.prototype.handleSummonZone = function (msg, gameState) {
  */
 WhiteHopeStrategy.prototype.handleUseSpell = function (msg, gameState) {
 	if (!msg.options || !msg.options.length) return null;
-	// Usar o primeiro feitiço disponível com nota moderada
-	return this.makeResult('USE_SPELL', [0], 55, msg.options.length, 'Usar Spell');
+	
+	var score = 55;
+	// Reduzir prioridade se precisarmos poupar energia para o Grow da LRIG
+	if (gameState.shouldSaveEnerForGrow()) {
+		score = 10;
+	}
+
+	return this.makeResult('USE_SPELL', [0], score, msg.options.length, 'Usar Spell');
 };
 
 /**
@@ -243,7 +252,13 @@ WhiteHopeStrategy.prototype.handleTrashSigni = function (msg, gameState) {
  */
 WhiteHopeStrategy.prototype.handleActionEffect = function (msg, gameState) {
 	if (!msg.options || !msg.options.length) return null;
-	return this.makeResult('USE_ACTION_EFFECT', [0], 50, msg.options.length, 'Usar Action Effect');
+
+	var score = 50;
+	if (gameState.shouldSaveEnerForGrow()) {
+		score = 10;
+	}
+
+	return this.makeResult('USE_ACTION_EFFECT', [0], score, msg.options.length, 'Usar Action Effect');
 };
 
 /**
@@ -259,8 +274,52 @@ WhiteHopeStrategy.prototype.handleResona = function (msg, gameState) {
  */
 WhiteHopeStrategy.prototype.handleSigniAttack = function (msg, gameState) {
 	if (!msg.options || !msg.options.length) return null;
-	// Sempre atacar quando possível
-	return this.makeResult('SIGNI_ATTACK', [0], 90, msg.options.length, 'SIGNI Ataque!');
+
+	var bestIdx = -1;
+	var bestScore = -1;
+
+	// O WIXOSS tem 3 colunas. Precisamos saber qual SIGNI ataca qual zona oponente.
+	// O select de SIGNI_ATTACK geralmente dá as opções de zonas/índices que podem atacar.
+	for (var i = 0; i < msg.options.length; i++) {
+		var zoneIdx = msg.options[i]; // No motor, a opção de ataque é o índice da zona (0, 1, 2)
+		var attackerSid = gameState.myFieldSids[zoneIdx];
+		var defenderSid = gameState.enemyFieldSids[zoneIdx];
+		
+		var attackerInfo = gameState.getCardInfo(attackerSid);
+		var defenderInfo = gameState.getCardInfo(defenderSid);
+
+		var score = 0;
+
+		if (!defenderSid) {
+			// Zona vazia: dano direto! Prioridade máxima.
+			score = 95;
+		} else if (attackerInfo && defenderInfo) {
+			if (attackerInfo.power > defenderInfo.power) {
+				// Atacante mais forte: banimento garantido.
+				score = 85;
+			} else if (attackerInfo.power === defenderInfo.power) {
+				// Empate: ambos são banidos? Ou apenas ataque bloqueado?
+				// Geralmente vale a pena se for para limpar o campo.
+				score = 50;
+			} else {
+				// Atacante mais fraco: o ataque é bloqueado. 
+				// O usuário disse que atacar contra mais forte é "ação desnecessária" (tapped e vulnerável).
+				score = 5; 
+			}
+		} else {
+			// Fallback se não tivermos info da carta
+			score = 60;
+		}
+
+		if (score > bestScore) {
+			bestScore = score;
+			bestIdx = i;
+		}
+	}
+
+	if (bestIdx === -1 || bestScore < 10) return null;
+
+	return this.makeResult('SIGNI_ATTACK', [bestIdx], bestScore, msg.options.length, 'SIGNI Ataque!');
 };
 
 /**
@@ -276,11 +335,27 @@ WhiteHopeStrategy.prototype.handleLrigAttack = function (msg, gameState) {
  */
 WhiteHopeStrategy.prototype.handleArts = function (msg, gameState) {
 	if (!msg.options || !msg.options.length) return null;
-	if (msg.min > 0) {
-		return this.makeResult(msg.label, [0], 60, msg.options.length, 'Usar Arts');
+
+	// No WHITE_HOPE (WD01), a Arts principal é WD01-008 que impede oponente de atacar.
+	// Ela deve ser usada defensivamente (no turno do oponente).
+	var score = 20;
+
+	if (gameState.isDefensiveTiming()) {
+		// No turno do oponente, arts defensivas são muito valiosas.
+		score = 75;
+	} else {
+		// No nosso turno, usar uma art defensiva é burrice.
+		score = 5;
 	}
-	// Opcional: não usar por padrão
-	return this.makeResult(msg.label, [], 20, msg.options.length, 'Pular Arts');
+
+	if (msg.min > 0) {
+		// Se for forçado a usar (improvável para arts opcionais)
+		return this.makeResult(msg.label, [0], Math.max(score, 60), msg.options.length, 'Usar Arts (Forçado)');
+	}
+
+	if (score < 10) return null;
+
+	return this.makeResult(msg.label, [0], score, msg.options.length, 'Usar Arts');
 };
 
 /**
@@ -315,13 +390,36 @@ WhiteHopeStrategy.prototype.handleTarget = function (msg, gameState) {
 	if (!msg.options || !msg.options.length) {
 		return this.makeResult('TARGET', [], 50, 0, 'Sem alvo');
 	}
-	// Escolher o primeiro alvo disponível
+
+	// Tentar escolher o alvo mais inteligente (SIGNI mais forte do oponente)
+	var bestIdx = 0;
+	var bestValue = -1;
+
+	for (var i = 0; i < msg.options.length; i++) {
+		var sid = msg.options[i];
+		var info = gameState.getCardInfo(sid);
+		var value = 1;
+
+		if (info) {
+			// Prioridade: Maior power > Maior level
+			value = (info.power || 0) + (info.level || 0) * 10000;
+		}
+
+		if (value > bestValue) {
+			bestValue = value;
+			bestIdx = i;
+		}
+	}
+
 	var selection = [];
 	var count = msg.min || 1;
-	for (var i = 0; i < count && i < msg.options.length; i++) {
-		selection.push(i);
+	// No WIXOSS, geralmente TARGET é o primeiro. Se precisar de mais, pegamos sequencialmente
+	for (var j = 0; j < count && j < msg.options.length; j++) {
+		var idx = (j === 0) ? bestIdx : (j <= bestIdx ? j - 1 : j);
+		selection.push(idx);
 	}
-	return this.makeResult('TARGET', selection, 50, msg.options.length, 'Selecionando alvo');
+
+	return this.makeResult('TARGET', selection, 50, msg.options.length, 'Selecionando alvo inteligente');
 };
 
 /**
@@ -358,14 +456,37 @@ WhiteHopeStrategy.prototype.handleGenericSelect = function (msg, gameState) {
 	this.logger.warn('SELECT genérico: ' + msg.label);
 	var selection = [];
 	var min = msg.min || 0;
+	var max = msg.max || 1;
 	var opts = msg.options || [];
 
-	if (min > 0) {
-		for (var i = 0; i < min && i < opts.length; i++) {
+	// Se min é 0 mas temos opções, a IA antiga retornava [].
+	// Agora, se tivermos opções, vamos pegar pelo menos 1 para não perder o efeito (ex: busca no deck).
+	var count = Math.max(min, (opts.length > 0 ? 1 : 0));
+	count = Math.min(count, max, opts.length);
+
+	for (var i = 0; i < count; i++) {
+		selection.push(i);
+	}
+
+	return this.makeResult(msg.label, selection, 30, opts.length, 'Genérico: ' + msg.label);
+};
+
+/**
+ * handleLaunch: Lida com ativação de Bursts e buscas no deck (label LAUNCH).
+ */
+WhiteHopeStrategy.prototype.handleLaunch = function (msg, gameState) {
+	var opts = msg.options || [];
+	var max = msg.max || 1;
+	var selection = [];
+
+	// Se tivermos opções, sempre queremos ativar/pegar o máximo (quase sempre benéfico)
+	if (opts.length > 0) {
+		for (var i = 0; i < max && i < opts.length; i++) {
 			selection.push(i);
 		}
 	}
-	return this.makeResult(msg.label, selection, 30, opts.length, 'Genérico: ' + msg.label);
+
+	return this.makeResult('LAUNCH', selection, 95, opts.length, 'Ativando LAUNCH/Burst');
 };
 
 // ============================================================

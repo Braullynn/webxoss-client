@@ -183,6 +183,19 @@ BotController.prototype.handleSelectMessages = function (selectMsgs) {
 	this.logger.log('Recebidos ' + selectMsgs.length + ' SELECT(s): ' +
 		selectMsgs.map(function (m) { return m.label; }).join(', '), 'info');
 
+	// Detecção de Turno: Certos labels garantem que é o nosso turno ou o do oponente
+	selectMsgs.forEach(function (msg) {
+		var l = msg.label;
+		// Se estamos fazendo ações proativas, é nosso turno
+		if (l === 'GROW' || l === 'END_ENER_PHASE' || l === 'SUMMON_SIGNI' || l === 'SIGNI_ATTACK' || l === 'LRIG_ATTACK' || l === 'CHARGE') {
+			self.gameState.isMyTurn = true;
+		}
+		// Se estamos apenas reagindo a ataques, é turno do oponente
+		if (l === 'GUARD' || l === 'PROTECT') {
+			self.gameState.isMyTurn = false;
+		}
+	});
+
 	// Avaliar cada SELECT usando a strategy
 	var bestAction = this.strategy.evaluateSelects(selectMsgs, this.gameState);
 
