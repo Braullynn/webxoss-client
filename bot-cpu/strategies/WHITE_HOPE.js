@@ -7,6 +7,7 @@
 function WhiteHopeStrategy(logger) {
 	this.name = 'White Hope';
 	this.logger = logger || new BotLogger('[WHITE_HOPE]');
+	this.lastArtPid = 0; // Rastreia a última Art ativada para context no TARGET
 }
 
 /**
@@ -148,10 +149,25 @@ WhiteHopeStrategy.prototype.evaluateSingleSelect = function (msg, gameState) {
 // ============================================================
 
 /**
- * Redraw: manter a mão, não trocar nada (estratégia conservadora).
+ * Redraw: trocar cartas de nível alto (3+).
  */
 WhiteHopeStrategy.prototype.handleRedraw = function (msg, gameState) {
-	return this.makeResult('DISCARD_AND_REDRAW', [], 80, msg.options ? msg.options.length : 0, 'Manter mão');
+	var options = msg.options || [];
+	var selection = [];
+
+	for (var i = 0; i < options.length; i++) {
+		var sid = options[i];
+		var info = gameState.getCardInfo(sid);
+		if (info && info.level >= 3) {
+			selection.push(i);
+		}
+	}
+
+	var description = selection.length > 0 ? 
+		'Descartando ' + selection.length + ' carta(s) nível 3+' : 
+		'Manter mão (sem cartas nível 3+)';
+
+	return this.makeResult('DISCARD_AND_REDRAW', selection, 80, options.length, description);
 };
 
 /**
@@ -336,26 +352,55 @@ WhiteHopeStrategy.prototype.handleLrigAttack = function (msg, gameState) {
 WhiteHopeStrategy.prototype.handleArts = function (msg, gameState) {
 	if (!msg.options || !msg.options.length) return null;
 
-	// No WHITE_HOPE (WD01), a Arts principal é WD01-008 que impede oponente de atacar.
-	// Ela deve ser usada defensivamente (no turno do oponente).
-	var score = 20;
+	var bestIdx = 0;
+	var bestScore = -1;
 
-	if (gameState.isDefensiveTiming()) {
-		// No turno do oponente, arts defensivas são muito valiosas.
-		score = 75;
-	} else {
-		// No nosso turno, usar uma art defensiva é burrice.
-		score = 5;
+	for (var i = 0; i < msg.options.length; i++) {
+		var sid = msg.options[i];
+		var pid = gameState.getPid(sid);
+		var score = 20;
+
+		if (gameState.isDefensiveTiming()) {
+			// No turno do oponente, arts defensivas são muito valiosas.
+			score = 75;
+
+			if (pid === 111) { // Baroque Defense
+				score = 80; // Prioridade alta para bloquear ataques
+			} else if (pid === 109) { // Rococo Boundary (Remoção)
+				// Se o oponente tiver apenas 1 SIGNI, talvez seja melhor poupar a Art de "até 2"
+				var enemyCount = gameState.enemyFieldSids.filter(function(id) { return !!id; }).length;
+				if (enemyCount < 2) {
+					this.logger.log('Poupar Rococo (PID 109): poucos alvos em campo.', 'score');
+					score = 15;
+				}
+			}
+		} else {
+			// No nosso turno
+			if (pid === 111) {
+				score = 5; // Nunca usar Baroque defensivo no ataque
+			} else if (pid === 109) {
+				score = 40; // Remoção no ataque pode ser bom, mas defensivamente é melhor
+			} else {
+				score = 10;
+			}
+		}
+
+		if (score > bestScore) {
+			bestScore = score;
+			bestIdx = i;
+		}
 	}
 
 	if (msg.min > 0) {
-		// Se for forçado a usar (improvável para arts opcionais)
-		return this.makeResult(msg.label, [0], Math.max(score, 60), msg.options.length, 'Usar Arts (Forçado)');
+		return this.makeResult(msg.label, [bestIdx], Math.max(bestScore, 60), msg.options.length, 'Usar Arts (Forçado)');
 	}
 
-	if (score < 10) return null;
+	if (bestScore < 10) return null;
 
-	return this.makeResult(msg.label, [0], score, msg.options.length, 'Usar Arts');
+	var bestPid = gameState.getPid(msg.options[bestIdx]);
+	this.lastArtPid = bestPid; // Salva contexto para o próximo TARGET
+	var desc = 'Usar Art (PID: ' + bestPid + ')';
+	return this.makeResult(msg.label, [bestIdx], bestScore, msg.options.length, desc);
 };
 
 /**
@@ -375,12 +420,30 @@ WhiteHopeStrategy.prototype.handleDiscard = function (msg, gameState) {
  * Guard: usar guard quando possível.
  */
 WhiteHopeStrategy.prototype.handleGuard = function (msg, gameState) {
-	if (!msg.options || !msg.options.length) return null;
-	if (msg.min > 0) {
-		return this.makeResult('GUARD', [0], 70, msg.options.length, 'Guard!');
+	var options = msg.options || [];
+	if (!options.length) {
+		this.logger.warn('GUARD: Nenhuma carta disponível para guarda nas opções!');
+		return null;
 	}
-	// Opcional: guardar se possível
-	return this.makeResult('GUARD', [0], 65, msg.options.length, 'Guard (opcional)');
+
+	// Logging das cartas disponíveis para Guard (ajuda no debug)
+	var availablePids = options.map(function(sid) { return gameState.getPid(sid); });
+	this.logger.log('GUARD: Opções disponíveis (PIDs): ' + availablePids.join(','), 'info');
+
+	var score = 70;
+	// Se a vida estiver baixa, o GUARD é essencial
+	if (gameState.myLifeCount <= 2) {
+		score = 95;
+		this.logger.log('GUARD: Vida crítica! Prioridade máxima.', 'score');
+	} else if (gameState.myLifeCount <= 4) {
+		score = 85;
+	}
+
+	if (msg.min > 0) {
+		return this.makeResult('GUARD', [0], Math.max(score, 80), options.length, 'Guard (Obrigatório)');
+	}
+
+	return this.makeResult('GUARD', [0], score, options.length, 'Guard');
 };
 
 /**
@@ -391,18 +454,32 @@ WhiteHopeStrategy.prototype.handleTarget = function (msg, gameState) {
 		return this.makeResult('TARGET', [], 50, 0, 'Sem alvo');
 	}
 
-	// Tentar escolher o alvo mais inteligente (SIGNI mais forte do oponente)
+	var lastPid = this.lastArtPid;
 	var bestIdx = 0;
 	var bestValue = -1;
 
 	for (var i = 0; i < msg.options.length; i++) {
 		var sid = msg.options[i];
 		var info = gameState.getCardInfo(sid);
+		var isUp = gameState.isCardUp(sid);
 		var value = 1;
 
 		if (info) {
-			// Prioridade: Maior power > Maior level
+			// Valor base: Power + Level
 			value = (info.power || 0) + (info.level || 0) * 10000;
+
+			// Bonus por estar UP
+			if (isUp) value += 1000000;
+
+			// Lógica específica para WD01-008 (Baroque Defense)
+			if (lastPid === 111) {
+				var zoneIdx = gameState.getEnemyZoneIdx(sid);
+				if (zoneIdx !== -1 && gameState.isMyZoneEmpty(zoneIdx)) {
+					// SIGNI inimigo que atacaria direto! Prioridade máxima.
+					value += 5000000;
+					this.logger.log('WD01-008: Priorizando atacante direto na zona ' + zoneIdx, 'score');
+				}
+			}
 		}
 
 		if (value > bestValue) {
@@ -412,14 +489,25 @@ WhiteHopeStrategy.prototype.handleTarget = function (msg, gameState) {
 	}
 
 	var selection = [];
-	var count = msg.min || 1;
-	// No WIXOSS, geralmente TARGET é o primeiro. Se precisar de mais, pegamos sequencialmente
-	for (var j = 0; j < count && j < msg.options.length; j++) {
-		var idx = (j === 0) ? bestIdx : (j <= bestIdx ? j - 1 : j);
-		selection.push(idx);
+	// Regra de quantidade:
+	// Se for WD01-006 (PID 109), selecionar MAX (até 2)
+	// Caso contrátio, seguir o mínimo ou 1.
+	var count = (lastPid === 109) ? (msg.max || 2) : (msg.min || 1);
+	count = Math.min(count, msg.options.length);
+
+	// Montar seleção (garantindo que o melhor alvo esteja incluído)
+	selection.push(bestIdx);
+	for (var j = 0; j < msg.options.length && selection.length < count; j++) {
+		if (j !== bestIdx) {
+			selection.push(j);
+		}
 	}
 
-	return this.makeResult('TARGET', selection, 50, msg.options.length, 'Selecionando alvo inteligente');
+	// Limpar lastArtPid após processar o TARGET
+	this.lastArtPid = 0;
+
+	var description = 'Selecionando ' + selection.length + ' alvo(s). Prioridade: ' + (gameState.getPid(msg.options[bestIdx]) || 'Desconhecido');
+	return this.makeResult('TARGET', selection, 50, msg.options.length, description);
 };
 
 /**
@@ -459,16 +547,14 @@ WhiteHopeStrategy.prototype.handleGenericSelect = function (msg, gameState) {
 	var max = msg.max || 1;
 	var opts = msg.options || [];
 
-	// Se min é 0 mas temos opções, a IA antiga retornava [].
-	// Agora, se tivermos opções, vamos pegar pelo menos 1 para não perder o efeito (ex: busca no deck).
-	var count = Math.max(min, (opts.length > 0 ? 1 : 0));
-	count = Math.min(count, max, opts.length);
+	// Priorizar buscar o máximo de cartas possível (especialmente em buscas no deck)
+	var count = Math.min(max, opts.length);
 
 	for (var i = 0; i < count; i++) {
 		selection.push(i);
 	}
 
-	return this.makeResult(msg.label, selection, 30, opts.length, 'Genérico: ' + msg.label);
+	return this.makeResult(msg.label, selection, 30, opts.length, 'Genérico (Max): ' + msg.label);
 };
 
 /**
@@ -479,14 +565,16 @@ WhiteHopeStrategy.prototype.handleLaunch = function (msg, gameState) {
 	var max = msg.max || 1;
 	var selection = [];
 
-	// Se tivermos opções, sempre queremos ativar/pegar o máximo (quase sempre benéfico)
+	// Sempre selecionar o máximo possível em busca/ativamento
 	if (opts.length > 0) {
-		for (var i = 0; i < max && i < opts.length; i++) {
+		var count = Math.min(max, opts.length);
+		this.logger.log('LAUNCH: Selecionando máximo (' + count + ')', 'action');
+		for (var i = 0; i < count; i++) {
 			selection.push(i);
 		}
 	}
 
-	return this.makeResult('LAUNCH', selection, 95, opts.length, 'Ativando LAUNCH/Burst');
+	return this.makeResult('LAUNCH', selection, 95, opts.length, 'Ativando LAUNCH/Burst (Max)');
 };
 
 // ============================================================
@@ -505,19 +593,33 @@ WhiteHopeStrategy.prototype.shouldPayEner = function (msg, gameState) {
  * msg.cards = SIDs disponíveis, msg.integers = custo necessário por cor.
  */
 WhiteHopeStrategy.prototype.selectEnerPayment = function (msg, gameState) {
-	// Selecionar as primeiras cartas (solução simples)
 	if (!msg.cards || !msg.cards.length) return [];
+	
+	var availableMasks = msg.integers || []; // Máscaras das cartas na Ener Zone
+	var requirements = msg.requirements || []; // Requisitos de custo ({count, mask})
 	var selection = [];
-	var needed = 0;
-	if (msg.requirements) {
-		msg.requirements.forEach(function (req) {
-			needed += (req.count || 0);
-		});
-	}
-	if (needed <= 0) needed = 1;
-	for (var i = 0; i < needed && i < msg.cards.length; i++) {
-		selection.push(i);
-	}
+	var usedIndices = {};
+
+	// Tentar satisfazer cada requisito
+	requirements.forEach(function(req) {
+		var needed = req.count || 0;
+		var mask = req.mask;
+
+		for (var i = 0; i < availableMasks.length && needed > 0; i++) {
+			if (usedIndices[i]) continue;
+
+			var cardMask = availableMasks[i];
+			// Se a máscara for 0 (Colorless/Qualquer), aceita qualquer cardMask.
+			// Caso contrário, verifica se o bit correspondente está ligado.
+			if (!mask || (cardMask & mask)) {
+				selection.push(i);
+				usedIndices[i] = true;
+				needed--;
+			}
+		}
+	});
+
+	this.logger.log('Pagamento Ener:Selecionados ' + selection.length + ' cartões para custo.', 'action');
 	return selection;
 };
 

@@ -170,6 +170,18 @@ BotController.prototype.processMessage = function (msgObj) {
 		case 'SET_COLOR':
 			this.logger.log('Cores definidas', 'state');
 			break;
+		case 'UP_CARD':
+			this.gameState.handleUpCard(msgObj.content);
+			break;
+		case 'DOWN_CARD':
+			this.gameState.handleDownCard(msgObj.content);
+			break;
+		case 'CRASH':
+			this.gameState.handleCrash(msgObj.content);
+			break;
+		case 'LIFE_COUNT':
+			this.gameState.handleLifeCount(msgObj.content);
+			break;
 	}
 };
 

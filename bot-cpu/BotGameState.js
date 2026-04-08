@@ -40,6 +40,9 @@ function BotGameState() {
 	this.isMyTurn = false;
 	this.myLrigLevel = 0;
 	this.myEnerCount = 0;
+
+	// Rastreador de estado UP/DOWN (default true)
+	this.sidToUp = {}; 
 }
 
 /**
@@ -156,6 +159,32 @@ BotGameState.prototype.handleFaceupCard = function (msg) {
 };
 
 /**
+ * Atualiza estado quando uma carta é colocada em pé (UP).
+ */
+BotGameState.prototype.handleUpCard = function (msg) {
+	if (msg.card) {
+		this.sidToUp[msg.card] = true;
+	}
+};
+
+/**
+ * Atualiza estado quando uma carta é virada (DOWN).
+ */
+BotGameState.prototype.handleDownCard = function (msg) {
+	if (msg.card) {
+		this.sidToUp[msg.card] = false;
+	}
+};
+
+/**
+ * Retorna se uma carta está em pé (UP).
+ */
+BotGameState.prototype.isCardUp = function (sid) {
+	// Se não soubermos, assumimos que está UP (default do motor)
+	return this.sidToUp[sid] !== false;
+};
+
+/**
  * Retorna o PID de um SID, ou 0 se desconhecido.
  */
 BotGameState.prototype.getPid = function (sid) {
@@ -177,6 +206,57 @@ BotGameState.prototype.getCardInfo = function (sid) {
  */
 BotGameState.prototype.shouldSaveEnerForGrow = function () {
 	return this.myLrigLevel < 4 && this.myEnerCount <= 1;
+};
+
+/**
+ * Retorna se a zona do bot no índice especificado (0, 1, 2) está vazia.
+ */
+BotGameState.prototype.isMyZoneEmpty = function (zoneIdx) {
+	return !this.myFieldSids[zoneIdx];
+};
+
+/**
+ * Retorna se a zona do oponente no índice especificado (0, 1, 2) está vazia.
+ */
+BotGameState.prototype.isEnemyZoneEmpty = function (zoneIdx) {
+	return !this.enemyFieldSids[zoneIdx];
+};
+
+/**
+ * Retorna o SID do SIGNI inimigo que está "em frente" à zona do bot zoneIdx.
+ */
+BotGameState.prototype.getEnemySigniInZone = function (zoneIdx) {
+	return this.enemyFieldSids[zoneIdx] || null;
+};
+
+/**
+ * Retorna qual zona (0-2) contém uma determinada carta (SID) no campo do oponente.
+ * Retorna -1 se não estiver no campo.
+ */
+BotGameState.prototype.getEnemyZoneIdx = function (sid) {
+	return this.enemyFieldSids.indexOf(sid);
+};
+
+/**
+ * Atualiza contagem de vida quando uma vida é perdida.
+ */
+BotGameState.prototype.handleCrash = function (msg) {
+	if (msg.player === this.mySid) {
+		this.myLifeCount = Math.max(0, this.myLifeCount - msg.count);
+	} else {
+		this.enemyLifeCount = Math.max(0, this.enemyLifeCount - msg.count);
+	}
+};
+
+/**
+ * Atualiza contagem de vida via mensagem explícita.
+ */
+BotGameState.prototype.handleLifeCount = function (msg) {
+	if (msg.player === this.mySid) {
+		this.myLifeCount = msg.count;
+	} else {
+		this.enemyLifeCount = msg.count;
+	}
 };
 
 /**
