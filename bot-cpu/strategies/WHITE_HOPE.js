@@ -149,7 +149,7 @@ WhiteHopeStrategy.prototype.evaluateSingleSelect = function (msg, gameState) {
 // ============================================================
 
 /**
- * Redraw: trocar cartas de nível alto (3+).
+ * Mulligan: trocar cartas de nível alto (3+).
  */
 WhiteHopeStrategy.prototype.handleRedraw = function (msg, gameState) {
 	var options = msg.options || [];
@@ -163,8 +163,8 @@ WhiteHopeStrategy.prototype.handleRedraw = function (msg, gameState) {
 		}
 	}
 
-	var description = selection.length > 0 ? 
-		'Descartando ' + selection.length + ' carta(s) nível 3+' : 
+	var description = selection.length > 0 ?
+		'Descartando ' + selection.length + ' carta(s) nível 3+' :
 		'Manter mão (sem cartas nível 3+)';
 
 	return this.makeResult('DISCARD_AND_REDRAW', selection, 80, options.length, description);
@@ -241,7 +241,7 @@ WhiteHopeStrategy.prototype.handleSummonZone = function (msg, gameState) {
  */
 WhiteHopeStrategy.prototype.handleUseSpell = function (msg, gameState) {
 	if (!msg.options || !msg.options.length) return null;
-	
+
 	var score = 55;
 	// Reduzir prioridade se precisarmos poupar energia para o Grow da LRIG
 	if (gameState.shouldSaveEnerForGrow()) {
@@ -300,7 +300,7 @@ WhiteHopeStrategy.prototype.handleSigniAttack = function (msg, gameState) {
 		var zoneIdx = msg.options[i]; // No motor, a opção de ataque é o índice da zona (0, 1, 2)
 		var attackerSid = gameState.myFieldSids[zoneIdx];
 		var defenderSid = gameState.enemyFieldSids[zoneIdx];
-		
+
 		var attackerInfo = gameState.getCardInfo(attackerSid);
 		var defenderInfo = gameState.getCardInfo(defenderSid);
 
@@ -314,13 +314,13 @@ WhiteHopeStrategy.prototype.handleSigniAttack = function (msg, gameState) {
 				// Atacante mais forte: banimento garantido.
 				score = 85;
 			} else if (attackerInfo.power === defenderInfo.power) {
-				// Empate: ambos são banidos? Ou apenas ataque bloqueado?
+				// Empate: o defensor é destruido.
 				// Geralmente vale a pena se for para limpar o campo.
-				score = 50;
+				score = 80;
 			} else {
 				// Atacante mais fraco: o ataque é bloqueado. 
-				// O usuário disse que atacar contra mais forte é "ação desnecessária" (tapped e vulnerável).
-				score = 5; 
+				// atacar contra mais forte é "ação desnecessária" (tapped e vulnerável).
+				score = 1;
 			}
 		} else {
 			// Fallback se não tivermos info da carta
@@ -368,7 +368,7 @@ WhiteHopeStrategy.prototype.handleArts = function (msg, gameState) {
 				score = 80; // Prioridade alta para bloquear ataques
 			} else if (pid === 109) { // Rococo Boundary (Remoção)
 				// Se o oponente tiver apenas 1 SIGNI, talvez seja melhor poupar a Art de "até 2"
-				var enemyCount = gameState.enemyFieldSids.filter(function(id) { return !!id; }).length;
+				var enemyCount = gameState.enemyFieldSids.filter(function (id) { return !!id; }).length;
 				if (enemyCount < 2) {
 					this.logger.log('Poupar Rococo (PID 109): poucos alvos em campo.', 'score');
 					score = 15;
@@ -427,7 +427,7 @@ WhiteHopeStrategy.prototype.handleGuard = function (msg, gameState) {
 	}
 
 	// Logging das cartas disponíveis para Guard (ajuda no debug)
-	var availablePids = options.map(function(sid) { return gameState.getPid(sid); });
+	var availablePids = options.map(function (sid) { return gameState.getPid(sid); });
 	this.logger.log('GUARD: Opções disponíveis (PIDs): ' + availablePids.join(','), 'info');
 
 	var score = 70;
@@ -594,14 +594,14 @@ WhiteHopeStrategy.prototype.shouldPayEner = function (msg, gameState) {
  */
 WhiteHopeStrategy.prototype.selectEnerPayment = function (msg, gameState) {
 	if (!msg.cards || !msg.cards.length) return [];
-	
+
 	var availableMasks = msg.integers || []; // Máscaras das cartas na Ener Zone
 	var requirements = msg.requirements || []; // Requisitos de custo ({count, mask})
 	var selection = [];
 	var usedIndices = {};
 
 	// Tentar satisfazer cada requisito
-	requirements.forEach(function(req) {
+	requirements.forEach(function (req) {
 		var needed = req.count || 0;
 		var mask = req.mask;
 
