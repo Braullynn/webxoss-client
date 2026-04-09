@@ -177,8 +177,32 @@ WhiteHopeStrategy.prototype.handleCharge = function (msg, gameState) {
 	if (!msg.options || !msg.options.length) {
 		return this.makeResult('CHARGE', [], 30, 0, 'Sem cartas para charge');
 	}
-	// Sempre fazer charge (pegar a primeira carta da mão)
-	return this.makeResult('CHARGE', [0], 70, msg.options.length, 'Charge carta');
+
+	var isEarlyGame = gameState.myLrigLevel <= 2;
+	var bestIdx = 0;
+	var bestScore = isEarlyGame ? -1 : 999; 
+
+	for (var i = 0; i < msg.options.length; i++) {
+		var sid = msg.options[i];
+		var info = gameState.getCardInfo(sid);
+		var cardLevel = info ? (info.level || 0) : 0;
+
+		if (isEarlyGame) {
+			// Early game: prioriza cartas de nivel maior pra charge
+			if (cardLevel > bestScore) {
+				bestScore = cardLevel;
+				bestIdx = i;
+			}
+		} else {
+			// Late game: prioriza cartas de nivel menor pra charge
+			if (cardLevel <= bestScore) {
+				bestScore = cardLevel;
+				bestIdx = i;
+			}
+		}
+	}
+
+	return this.makeResult('CHARGE', [bestIdx], 70, msg.options.length, 'Charge inteligente da mão');
 };
 
 /**
@@ -242,13 +266,38 @@ WhiteHopeStrategy.prototype.handleSummonZone = function (msg, gameState) {
 WhiteHopeStrategy.prototype.handleUseSpell = function (msg, gameState) {
 	if (!msg.options || !msg.options.length) return null;
 
-	var score = 55;
-	// Reduzir prioridade se precisarmos poupar energia para o Grow da LRIG
-	if (gameState.shouldSaveEnerForGrow()) {
-		score = 10;
+	var bestIdx = 0;
+	var bestScore = -1;
+
+	for (var i = 0; i < msg.options.length; i++) {
+		var sid = msg.options[i];
+		var info = gameState.getCardInfo(sid);
+
+		var score = 55;
+		var enerCostTotal = 0;
+
+		if (info) {
+			var colors = ['White', 'Black', 'Red', 'Blue', 'Green', 'Colorless'];
+			for (var c = 0; c < colors.length; c++) {
+				enerCostTotal += (info['cost' + colors[c]] || 0);
+			}
+		}
+
+		if (gameState.shouldSaveEnerForGrow() && enerCostTotal > 0) {
+			score = 10;
+		} else if (enerCostTotal === 0) {
+			score = 75; // Bônus para spells gratuitas
+		}
+
+		if (score > bestScore) {
+			bestScore = score;
+			bestIdx = i;
+		}
 	}
 
-	return this.makeResult('USE_SPELL', [0], score, msg.options.length, 'Usar Spell');
+	if (bestScore < 10) return null;
+
+	return this.makeResult('USE_SPELL', [bestIdx], bestScore, msg.options.length, 'Usar Spell');
 };
 
 /**
@@ -490,9 +539,8 @@ WhiteHopeStrategy.prototype.handleTarget = function (msg, gameState) {
 
 	var selection = [];
 	// Regra de quantidade:
-	// Se for WD01-006 (PID 109), selecionar MAX (até 2)
-	// Caso contrátio, seguir o mínimo ou 1.
-	var count = (lastPid === 109) ? (msg.max || 2) : (msg.min || 1);
+	// Prioriza escolher o MAXimo possível quando permitido, especialmente para o Meta do deck
+	var count = msg.max || msg.min || 1;
 	count = Math.min(count, msg.options.length);
 
 	// Montar seleção (garantindo que o melhor alvo esteja incluído)
@@ -596,9 +644,16 @@ WhiteHopeStrategy.prototype.selectEnerPayment = function (msg, gameState) {
 	if (!msg.cards || !msg.cards.length) return [];
 
 	var availableMasks = msg.integers || []; // Máscaras das cartas na Ener Zone
-	var requirements = msg.requirements || []; // Requisitos de custo ({count, mask})
+	var requirements = msg.requirements ? msg.requirements.slice() : []; // Requisitos de custo ({count, mask})
 	var selection = [];
 	var usedIndices = {};
+
+	// Ordena os requerimentos: máscaras coloridas específicas primeiro, incolor por último
+	requirements.sort(function(a, b) {
+		var maskA = a.mask || 0;
+		var maskB = b.mask || 0;
+		return maskB - maskA; 
+	});
 
 	// Tentar satisfazer cada requisito
 	requirements.forEach(function (req) {
