@@ -171,38 +171,88 @@ WhiteHopeStrategy.prototype.handleRedraw = function (msg, gameState) {
 };
 
 /**
- * Charge: colocar a primeira carta disponível no ener.
+ * Charge: colocar carta no ener baseando-se no seu valor estratégico, poupando Win Conditions e Defesas.
  */
 WhiteHopeStrategy.prototype.handleCharge = function (msg, gameState) {
 	if (!msg.options || !msg.options.length) {
 		return this.makeResult('CHARGE', [], 30, 0, 'Sem cartas para charge');
 	}
 
-	var isEarlyGame = gameState.myLrigLevel <= 2;
-	var bestIdx = 0;
-	var bestScore = isEarlyGame ? -1 : 999; 
+	var bestIdx = -1;
+	var bestScore = -1;
+
+	// Opcional: contar duplicatas na mão para encorajar o descarte de cartas repetidas
+	var pidCounts = {};
+	for (var j = 0; j < msg.options.length; j++) {
+		var p = gameState.getPid(msg.options[j]);
+		pidCounts[p] = (pidCounts[p] || 0) + 1;
+	}
 
 	for (var i = 0; i < msg.options.length; i++) {
 		var sid = msg.options[i];
 		var info = gameState.getCardInfo(sid);
-		var cardLevel = info ? (info.level || 0) : 0;
+		var pid = gameState.getPid(sid);
+		
+		// Score base para qualquer carta ser colocada no Ener
+		var score = 50; 
 
-		if (isEarlyGame) {
-			// Early game: prioriza cartas de nivel maior pra charge
-			if (cardLevel > bestScore) {
-				bestScore = cardLevel;
-				bestIdx = i;
+		if (info) {
+			var cardLevel = info.level !== undefined ? info.level : 0;
+			
+			// Identifica cartas com GUARD (Crucial para sobreviver aos ataques da LRIG)
+			// Adapte "info.guard" ou a string "Servant" de acordo com o que sua engine retornar na variável info.
+			var isGuard = info.guard === true || (info.classes && info.classes.indexOf('Servant') !== -1) || (info.text && info.text.indexOf('Guard') !== -1);
+			var isSpell = info.type === 'Spell';
+
+			// 1. PROTEGER DEFESAS: Nunca priorizar Guardiões/Servants, a não ser que a mão esteja entupida deles.
+			if (isGuard) {
+				score -= 40; 
 			}
-		} else {
-			// Late game: prioriza cartas de nivel menor pra charge
-			if (cardLevel <= bestScore) {
-				bestScore = cardLevel;
-				bestIdx = i;
+
+			// 2. PROTEGER WIN CONDITIONS: Penalidade severa para jogar atacantes principais no Ener.
+			if (cardLevel >= 3) {
+				score -= 30;
 			}
+
+			// 3. FODDER DE ENER: SIGNIs de nível 1 e 2 perdem utilidade no late game, ótimos para virar recurso.
+			if (cardLevel === 1 || cardLevel === 2) {
+				score += 20; 
+			}
+
+			// 4. SPELLS: Geralmente são situacionais. Bons para dar Ener se não for o momento de usá-los.
+			if (isSpell) {
+				score += 10;
+			}
+			
+			// 5. REDUNDÂNCIA: Bônus por duplicatas. Se temos mais de uma cópia dessa carta na mão, é seguro descartar uma.
+			if (pidCounts[pid] > 1) {
+				score += 15;
+			}
+		}
+
+		if (score > bestScore) {
+			bestScore = score;
+			bestIdx = i;
 		}
 	}
 
-	return this.makeResult('CHARGE', [bestIdx], 70, msg.options.length, 'Charge inteligente da mão');
+	// 6. PULAR O CHARGE SE A MÃO SÓ TIVER CARTAS VITAIS
+	// No WIXOSS você não é obrigado a dar Charge. Se sua mão está pequena (<= 3) 
+	// e a "melhor" carta ainda tem score muito baixo (indicando que só sobraram Guards ou Nível 3+), pulamos a fase.
+	var handSize = msg.options.length;
+	if (bestScore <= 30 && handSize <= 3) {
+		this.logger.log('CHARGE: Pular charge para poupar Guards e cartas nível 3+ (Mão pequena)', 'action');
+		// Mandar array vazio [] instrui a engine a não selecionar nada e seguir o jogo.
+		return this.makeResult('CHARGE', [], 80, msg.options.length, 'Pular Charge (Poupar mão vital)');
+	}
+
+	// Se chegamos até aqui, encontramos um alvo aceitável para o Ener.
+	if (bestIdx !== -1) {
+		return this.makeResult('CHARGE', [bestIdx], 70, msg.options.length, 'Charge inteligente (Score: ' + bestScore + ')');
+	}
+
+	// Fallback genérico caso tudo falhe
+	return this.makeResult('CHARGE', [0], 30, msg.options.length, 'Charge fall-back (Fallback)');
 };
 
 /**
