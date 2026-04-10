@@ -572,12 +572,51 @@ WhiteHopeStrategy.prototype.handleTarget = function (msg, gameState) {
 
 			// Lógica específica para WD01-008 (Baroque Defense)
 			if (lastPid === 111) {
-				var zoneIdx = gameState.getEnemyZoneIdx(sid);
-				if (zoneIdx !== -1 && gameState.isMyZoneEmpty(zoneIdx)) {
-					// SIGNI inimigo que atacaria direto! Prioridade máxima.
-					value += 5000000;
-					this.logger.log('WD01-008: Priorizando atacante direto na zona ' + zoneIdx, 'score');
+				// Zeramos o valor padrão para não interferir na nossa lógica customizada de prioridades
+				value = 0; 
+
+				// Apenas aplicamos o efeito se o alvo ainda puder atacar (estiver desvirado / UP).
+				// Alvos que já atacaram ("DOWN") não são ameaças no momento e recebem score nulo.
+				if (isUp && info) {
+					// Detecta se é o LRIG inimigo
+					var isLrig = (info.type === 'LRIG' || info.cardType === 'LRIG');
+
+					if (isLrig) {
+						// PRIORIDADE 4: LRIG 
+						// (Menor prioridade dentro dos alvos válidos, pois muitas vezes podemos bloquear com [Guard])
+						value += 10000;
+					} else {
+						// É um SIGNI
+						var zoneIdx = gameState.getEnemyZoneIdx(sid);
+						var isDirectAttacker = (zoneIdx !== -1 && gameState.isMyZoneEmpty(zoneIdx));
+						
+						// Heurística para descobrir se tem habilidade (Se possui texto considerável e não é uma carta "Vanilla")
+						var hasAbility = (info.text && info.text.trim().length > 5 && info.text.toLowerCase().indexOf('vanilla') === -1);
+
+						if (isDirectAttacker) {
+							// PRIORIDADE 1: SIGNI atacando diretamente
+							value += 50000000; // Valor astronômico
+						} else {
+							// É um SIGNI cujo ataque seria bloqueado pelo nosso SIGNI na frente dele
+							// Ganha um valor base maior que o LRIG, mas muito inferior ao Atacante Direto
+							value += 100000;
+						}
+
+						// PRIORIDADE 2: SIGNI com maior ATK
+						// Somar o poder multiplica o desempate. Um Atacante Direto de 15k ganha de um Atacante Direto de 5k.
+						// (Multiplicamos por 10 para ter espaço na pontuação para a habilidade)
+						value += (info.power || 0) * 10;
+
+						// PRIORIDADE 3: SIGNI com habilidade
+						// Adiciona um pequeno bônus. Se tivermos dois Atacantes com exatos 10.000 de ataque, 
+						// aquele que tiver habilidade vai vencer o desempate e ser focado.
+						if (hasAbility) {
+							value += 5000;
+						}
+					}
 				}
+				
+				this.logger.log('WD01-008[Baroque Def]: Analisando alvo ' + (info ? info.name || sid : sid) + ' | Score: ' + value, 'score');
 			}
 		}
 
