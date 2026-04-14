@@ -192,13 +192,13 @@ WhiteHopeStrategy.prototype.handleCharge = function (msg, gameState) {
 		var sid = msg.options[i];
 		var info = gameState.getCardInfo(sid);
 		var pid = gameState.getPid(sid);
-		
+
 		// Score base para qualquer carta ser colocada no Ener
-		var score = 50; 
+		var score = 50;
 
 		if (info) {
 			var cardLevel = info.level !== undefined ? info.level : 0;
-			
+
 			// Identifica cartas com GUARD (Crucial para sobreviver aos ataques da LRIG)
 			// Adapte "info.guard" ou a string "Servant" de acordo com o que sua engine retornar na variável info.
 			var isGuard = info.guard === true || (info.classes && info.classes.indexOf('Servant') !== -1) || (info.text && info.text.indexOf('Guard') !== -1);
@@ -206,7 +206,7 @@ WhiteHopeStrategy.prototype.handleCharge = function (msg, gameState) {
 
 			// 1. PROTEGER DEFESAS: Nunca priorizar Guardiões/Servants, a não ser que a mão esteja entupida deles.
 			if (isGuard) {
-				score -= 40; 
+				score -= 40;
 			}
 
 			// 2. PROTEGER WIN CONDITIONS: Penalidade severa para jogar atacantes principais no Ener.
@@ -216,14 +216,14 @@ WhiteHopeStrategy.prototype.handleCharge = function (msg, gameState) {
 
 			// 3. FODDER DE ENER: SIGNIs de nível 1 e 2 perdem utilidade no late game, ótimos para virar recurso.
 			if (cardLevel === 1 || cardLevel === 2) {
-				score += 20; 
+				score += 20;
 			}
 
 			// 4. SPELLS: Geralmente são situacionais. Bons para dar Ener se não for o momento de usá-los.
 			if (isSpell) {
 				score += 10;
 			}
-			
+
 			// 5. REDUNDÂNCIA: Bônus por duplicatas. Se temos mais de uma cópia dessa carta na mão, é seguro descartar uma.
 			if (pidCounts[pid] > 1) {
 				score += 15;
@@ -464,7 +464,7 @@ WhiteHopeStrategy.prototype.handleArts = function (msg, gameState) {
 			score = 75;
 
 			if (pid === 111) { // Baroque Defense
-				score = 80; // Prioridade alta para bloquear ataques
+				score = 5;
 			} else if (pid === 109) { // Rococo Boundary (Remoção)
 				// Se o oponente tiver apenas 1 SIGNI, talvez seja melhor poupar a Art de "até 2"
 				var enemyCount = gameState.enemyFieldSids.filter(function (id) { return !!id; }).length;
@@ -474,11 +474,11 @@ WhiteHopeStrategy.prototype.handleArts = function (msg, gameState) {
 				}
 			}
 		} else {
-			// No nosso turno
+			// Palyer turn
 			if (pid === 111) {
-				score = 5; // Nunca usar Baroque defensivo no ataque
+				score = 80;
 			} else if (pid === 109) {
-				score = 40; // Remoção no ataque pode ser bom, mas defensivamente é melhor
+				score = 40;
 			} else {
 				score = 10;
 			}
@@ -573,7 +573,7 @@ WhiteHopeStrategy.prototype.handleTarget = function (msg, gameState) {
 			// Lógica específica para WD01-008 (Baroque Defense)
 			if (lastPid === 111) {
 				// Zeramos o valor padrão para não interferir na nossa lógica customizada de prioridades
-				value = 0; 
+				value = 0;
 
 				// Apenas aplicamos o efeito se o alvo ainda puder atacar (estiver desvirado / UP).
 				// Alvos que já atacaram ("DOWN") não são ameaças no momento e recebem score nulo.
@@ -589,7 +589,7 @@ WhiteHopeStrategy.prototype.handleTarget = function (msg, gameState) {
 						// É um SIGNI
 						var zoneIdx = gameState.getEnemyZoneIdx(sid);
 						var isDirectAttacker = (zoneIdx !== -1 && gameState.isMyZoneEmpty(zoneIdx));
-						
+
 						// Heurística para descobrir se tem habilidade (Se possui texto considerável e não é uma carta "Vanilla")
 						var hasAbility = (info.text && info.text.trim().length > 5 && info.text.toLowerCase().indexOf('vanilla') === -1);
 
@@ -615,7 +615,7 @@ WhiteHopeStrategy.prototype.handleTarget = function (msg, gameState) {
 						}
 					}
 				}
-				
+
 				this.logger.log('WD01-008[Baroque Def]: Analisando alvo ' + (info ? info.name || sid : sid) + ' | Score: ' + value, 'score');
 			}
 		}
@@ -738,10 +738,10 @@ WhiteHopeStrategy.prototype.selectEnerPayment = function (msg, gameState) {
 	var usedIndices = {};
 
 	// Ordena os requerimentos: máscaras coloridas específicas primeiro, incolor por último
-	requirements.sort(function(a, b) {
+	requirements.sort(function (a, b) {
 		var maskA = a.mask || 0;
 		var maskB = b.mask || 0;
-		return maskB - maskA; 
+		return maskB - maskA;
 	});
 
 	// Tentar satisfazer cada requisito
